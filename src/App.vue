@@ -1,92 +1,89 @@
-<script setup>
-import {ref} from 'vue';
+<script setup lang="ts">
+    import { ref, onMounted, computed } from 'vue';
+    import { getCountries } from './api';
+    import { Capital, Country, Result } from './models';
+    import { calculateDistance } from './utils';
+    import CapitalSelect from './components/CapitalSelect.vue';
+    import DistanceInput from './components/DistanceInput.vue';
+    import RangeSlider from './components/RangeSlider.vue';
+    import ResultList from './components/ResultList.vue';
 
-const countries = ref([])
+    // Refs for holding data
+    const countries = ref<Country[]>([]);
+    const capital = ref('');
+    const distance = ref(2500);
 
-const capital = ref("");
+    // Fetch countries on component mount
+    onMounted(async () => {
+        try {
+            countries.value = await getCountries();
+        } catch (error) {
+            console.error('Error fetching countries:', error);
+        }
+    });
 
-const distance = ref(2500);
+    const capitals = computed<Capital[]>(() =>
+        countries.value.map(country => ({
+            capital: country.capital,
+            country: country.country,
+        })),
+    );
 
+    // Compute filtered results when capital or distance changes
+    const results = computed<Result[]>(() => {
+        const selectedCountry = countries.value.find(country => country.capital === capital.value);
+
+        if (!selectedCountry) {
+            return [];
+        }
+
+        // Filter capitals in the same region and within the selected distance
+        return countries.value
+            .filter(country => country.region === selectedCountry.region && country.capital !== selectedCountry.capital)
+            .map(country => {
+                const dist = calculateDistance(selectedCountry.lat, selectedCountry.lon, country.lat, country.lon);
+                return {
+                    capital: country.capital,
+                    country: country.country,
+                    distance: dist,
+                };
+            })
+            .filter(country => country.distance <= (distance.value || 0))
+            .sort((a, b) => a.distance - b.distance);
+    });
 </script>
 
 <template>
-  <main class="container">
-    <section>
-      <h2>Settings:</h2>
-      <div class="settings">
-        <div class="item double">
-          <label for="capital">Capital:</label>
-          <select name="capital" id="capital" v-model="capital">
-            <option value="">Please select a capital</option>
-          </select>
-        </div>
-
-        <div class="item">
-            <label for="distance">Distance:</label>
-            <input type="text" id="distance" name="distance" size="5" min="500" max="5000" v-model="distance">
-        </div>
-
-        <div class="item double">
-          <label for="slider">Select distance:</label>
-          <input type="range" class="slider" id="slider" min="500" max="5000" v-model="distance">
-        </div>
-
-      </div>
-    </section>
-
-    <section>
-      <h2>Results:</h2>
-      <div id="results">
-      <!-- RESULTS GO HERE -->
-      </div>
-    </section>
-  </main>
-
-
+    <main class="container">
+        <section>
+            <h2>Settings:</h2>
+            <div class="settings">
+                <CapitalSelect
+                    v-model="capital"
+                    :capitals="capitals"
+                />
+                <DistanceInput v-model="distance" />
+                <RangeSlider v-model="distance" />
+            </div>
+        </section>
+        <section>
+            <h2>Results:</h2>
+            <ResultList :items="results" />
+        </section>
+    </main>
 </template>
 
 <style scoped>
-
-main.container{
-  width: 1024px;
-}
-
-section {
-  border: 1px solid #ccc;
-  border-radius: 10px;
-  padding: 20px;
-  margin: 20px 0;
-}
-
-.settings {
-  display: flex;
-}
-
-.item {
-  width: 10%;
-}
-
-.item.double {
-  flex-grow: 2;
-}
-
-label {
-  display: block;
-  padding: 10px 0;
-}
-
-input {
-  font-size: medium;
-}
-
-select {
-  width: 85%;
-  font-size: large;
-  display: block;
-}
-
-.slider {
-  width: 100%;
-}
-
+    main.container {
+        width: 1024px;
+    }
+    section {
+        border: 1px solid #ccc;
+        border-radius: 10px;
+        padding: 20px;
+        margin: 20px 0;
+    }
+    .settings {
+        display: flex;
+    }
 </style>
